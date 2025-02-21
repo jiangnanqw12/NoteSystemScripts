@@ -2,36 +2,52 @@ import os
 import subprocess
 
 def get_git_status(project_path):
-    """获取 git status --short 的输出"""
-    result = subprocess.run(["git", "status", "--short"], cwd=project_path, capture_output=True, text=True)
-    return result.stdout.strip()
+    """Get the output of 'git status --short' to check for changes"""
+    try:
+        # Run the git status command with explicit UTF-8 encoding
+        result = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"  # Explicitly set the encoding to UTF-8
+        )
+        # Ensure the result is not None and return the stripped output
+        if result and result.stdout:
+            return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"Error running git status in {project_path}: {e}")
+    return ""  # Return an empty string if no changes or error occurs
 
 def commit_changes(project_path, project_name, changes):
-    """提交 git 变更"""
-    commit_message = f"更新 project ({project_name}) 改动文件为: {changes}"
-    subprocess.run(["git", "add", "--all"], cwd=project_path)
-    subprocess.run(["git", "commit", "-m", commit_message], cwd=project_path)
+    """Commit changes with a message that includes the project name and changes"""
+    commit_message = f"Update project ({project_name}) changes: {changes}"
+    subprocess.run(["git", "add", "."], cwd=project_path)  # Stage all changes
+    subprocess.run(["git", "commit", "-m", commit_message], cwd=project_path)  # Commit the changes
 
 def process_projects(base_path):
-    """遍历 /002_Projects 下的所有项目并提交变更"""
-    projects_path = os.path.join(base_path, "002_Projects")
-    if not os.path.exists(projects_path):
-        print(f"错误: 目录 {projects_path} 不存在")
+    """Traverse all projects in /002_Projects and commit changes if any"""
+    projects_path = os.path.join(base_path, "002_Projects")  # Path to the projects folder
+    if not os.path.exists(projects_path):  # Check if the directory exists
+        print(f"Error: The directory {projects_path} does not exist.")
         return
-    if os.path.exists(os.path.join(base_path, "/.git/")):
-        print(f"错误: 目录 .git 不存在")
+
+    # Check if /.git/ exists in the base path
+    if not os.path.exists(os.path.join(base_path, ".git")):
+        print(f"Error: The /.git/ directory not exist in the base path.")
         return
-    for project in os.listdir(projects_path):
+
+    for project in os.listdir(projects_path):  # Loop through each project folder
         project_path = os.path.join(projects_path, project)
-        if os.path.isdir(project_path) :
-            changes = get_git_status(project_path)
-            if changes:
-                print(f"检测到 {project} 有变更，提交中...")
+        if os.path.isdir(project_path):  # Only process directories
+            changes = get_git_status(project_path)  # Get the status of changes
+            if changes:  # If there are changes, commit them
+                print(f"Detected changes in {project}, committing...")
                 commit_changes(project_path, project, changes)
-                print(f"{project} 提交完成！")
+                print(f"Changes in {project} have been committed!")
             else:
-                print(f"{project} 没有变更，跳过。")
+                print(f"{project} has no changes, skipping.")
 
 if __name__ == "__main__":
-    base_directory = r"C:\Users\shade\OneDrive\KG"
+    base_directory = r"C:\Users\shade\OneDrive\KG"  # Replace with your base directory path
     process_projects(base_directory)
