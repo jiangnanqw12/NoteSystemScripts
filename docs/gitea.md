@@ -366,6 +366,149 @@ INT32 LTDRV_AcSetVoltage(
 );
 ```
 
+先把 **COMM** 这一段表格补完整，然后下面给一份简短的“说明文档”。
+
 ---
 
-如果你愿意，我可以按你实际 MCU/FPGA 的定点格式，再帮你把这些 `float` 统一成定点整型的风格（比如 Q16.16 或“单位：0.001deg”的 `INT32`），顺手给一份协议/接口对照表的“最终版”。
+### 1. COMM 段补全后的表格
+
+```markdown
+| 指令类 | 指令                    | 返回值                   | 含义                                    | 接口                                                                                           |
+| ------ | ----------------------- | ------------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| COMM   | COMM:TTLO 0             |                          | 关闭 TTL 串口输出功能， 默认开机即关闭  | INT32 LTDRV_AcSetTtlOutputMode(UINT32 acId, UINT8 mode)  // 0:关闭；1:输出位置；2:输出速度     |
+|        | COMM:TTLO 1             |                          | TTL 串口输出当前位置                    |                                                                                                |
+|        | COMM:TTLO 2             |                          | TTL 串口输出当前速度                    |                                                                                                |
+|        | COMM:TTLF 921600        |                          | 设置 TTL 串口输出的波特率为921600       | INT32 LTDRV_AcSetTtlBaudrate(UINT32 acId, UINT32 baudrate)                                    |
+|        | COMM:485B 921600        |                          | 设置 RS485 的波特率为921600             | INT32 LTDRV_AcSet485Baudrate(UINT32 acId, UINT32 baudrate)                                    |
+|        | COMM:485B?              | COMM:485B 921600         | 查询 RS485 波特率                       | INT32 LTDRV_AcGet485Baudrate(UINT32 acId, UINT32 *baudrate)                                   |
+|        | COMM:IPAD 192,168,1,1   |                          | 设置网口的 IP 地址为 192.168.1.1        | INT32 LTDRV_AcSetIpAddress(UINT32 acId, UINT8 ip0, UINT8 ip1, UINT8 ip2, UINT8 ip3)           |
+|        | COMM:GAT X,X,X,X        |                          | 设置网口的网关                          | INT32 LTDRV_AcSetGateway(UINT32 acId, UINT8 gw0, UINT8 gw1, UINT8 gw2, UINT8 gw3)             |
+|        | COMM:SUBD X,X,X,X       |                          | 设置网口的子网掩码                      | INT32 LTDRV_AcSetSubnetMask(UINT32 acId, UINT8 mask0, UINT8 mask1, UINT8 mask2, UINT8 mask3)  |
+```
+
+> 类型说明：这里默认用 `UINT8` 表示 IPv4 每一段（0~255），`UINT32` 表示波特率数值。你可以根据实际固件实现改成 `UINT32 ip` 或字符串等。
+
+---
+
+### 2. COMM 模块说明文档（简要版）
+
+#### 2.1 TTL 串口输出控制
+
+**指令：**
+
+* `COMM:TTLO 0`：关闭 TTL 串口输出
+* `COMM:TTLO 1`：TTL 串口周期性输出当前位置
+* `COMM:TTLO 2`：TTL 串口周期性输出当前速度
+
+**对应接口：**
+
+```c
+INT32 LTDRV_AcSetTtlOutputMode(UINT32 acId, UINT8 mode);
+// mode = 0: 关闭输出
+//      = 1: 输出位置（Position）
+//      = 2: 输出速度（Speed）
+```
+
+**说明：**
+
+* 该功能用于通过 TTL 串口对外实时输出运动数据（位置/速度）。
+* 建议在内部初始化时根据应用场景设置好，不对普通用户开放 GUI 配置（降低误操作风险）。
+* 输出格式（比如二进制/ASCII、数据帧结构）应在通信协议章节中统一说明，这里只负责开关与模式选择。
+
+---
+
+#### 2.2 TTL 串口波特率设置
+
+**指令：**
+
+* `COMM:TTLF 921600`：设置 TTL 串口输出的波特率为 921600 bps
+
+**对应接口：**
+
+```c
+INT32 LTDRV_AcSetTtlBaudrate(UINT32 acId, UINT32 baudrate);
+```
+
+**说明：**
+
+* `baudrate` 为实际波特率数值，如 115200、921600 等。
+* 设置成功后，TTL 串口后续输出将使用新的波特率，外部设备（示波器/逻辑分析仪/上位机）需同步配置相同波特率。
+* 若固件仅支持固定几个档位，建议在文档中列出支持列表，例如：`[9600, 19200, 115200, 921600]`，其他值返回错误码。
+
+---
+
+#### 2.3 RS485 波特率设置与查询
+
+**指令：**
+
+* `COMM:485B 921600`：设置 RS485 波特率为 921600 bps
+* `COMM:485B?`：查询当前 RS485 波特率
+
+  * 返回示例：`COMM:485B 921600`
+
+**对应接口：**
+
+```c
+INT32 LTDRV_AcSet485Baudrate(UINT32 acId, UINT32 baudrate);
+INT32 LTDRV_AcGet485Baudrate(UINT32 acId, UINT32 *baudrate);
+```
+
+**说明：**
+
+* RS485 通讯的波特率必须与上位机/柜内其他节点一致，否则无法正常通讯。
+* 建议：
+
+  * 设置非法波特率时返回错误码；
+  * 在用户手册中给出推荐/支持的波特率列表；
+  * 明确说明是否需要重启控制器或重新上电后设置才生效（如果有）。
+
+---
+
+#### 2.4 以太网 IP / 网关 / 子网掩码设置
+
+**指令：**
+
+* `COMM:IPAD 192,168,1,1`
+  设置控制器网口 IP 地址为 `192.168.1.1`
+* `COMM:GAT 192,168,1,254`
+  设置网关（Gateway）为 `192.168.1.254`
+* `COMM:SUBD 255,255,255,0`
+  设置子网掩码为 `255.255.255.0`
+
+（示例中的数字可根据实际网络规划调整）
+
+**对应接口：**
+
+```c
+INT32 LTDRV_AcSetIpAddress(
+    UINT32 acId,
+    UINT8  ip0, UINT8 ip1, UINT8 ip2, UINT8 ip3
+);
+
+INT32 LTDRV_AcSetGateway(
+    UINT32 acId,
+    UINT8  gw0, UINT8 gw1, UINT8 gw2, UINT8 gw3
+);
+
+INT32 LTDRV_AcSetSubnetMask(
+    UINT32 acId,
+    UINT8  mask0, UINT8 mask1, UINT8 mask2, UINT8 mask3
+);
+```
+
+**说明：**
+
+* 以上接口针对 IPv4 地址，每一段取值范围为 0~255。
+* 执行 IP/网关/掩码设置后，通常：
+
+  * 若固件支持“在线切换”，则立即生效；
+  * 若不支持，则需要在文档中明确说明“需重启控制器后生效”。
+* 建议：
+
+  * 在上位机界面做基础合法性校验（例如不能设置广播地址、0.0.0.0 等）；
+  * 在用户手册中给出典型配置示例（比如默认 IP、默认子网掩码、默认网关等）。
+
+---
+
+如果你愿意，我可以帮你把 **COMM** 这一段也合并进你那份完整的大表里，输出成一份“接口对照 + 简要说明”的最终版 Markdown，直接塞到手册里就能用。
+
