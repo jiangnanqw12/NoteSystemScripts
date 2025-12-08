@@ -1,3 +1,93 @@
+
+
+### 🛠️ 个人自动化处理脚本（按操作对象模块化）
+
+---
+
+#### 1. 操作对象：Git
+
+##### 1.1 Git 代码仓
+
+- `git clone`
+- `git pull`
+
+##### 1.2 PARA 笔记仓
+
+- 更新项目（update project）
+- 移动文件夹（mv folder）
+
+---
+
+#### 2. 操作对象：Code（如 C / C++ / Python 等代码文本）
+
+---
+
+#### 3. 操作对象：Config（如 JSON / INI / XML 等配置文件）
+
+---
+
+#### 4. 操作对象：Markdown
+
+
+
+### 📁 自动化脚本项目结构（模块化划分）
+
+```
+auto_scripts/
+├── src/
+│   ├── git_ops/
+│   │   ├── code_repos/
+│   │   └── para_notes/
+│   ├── code_processing/
+│   ├── config_handling/
+│   ├── markdown_tools/
+│   └── common/
+├── config/
+│   ├── git_ops/
+│   │   ├── code_repos.yaml
+│   │   └── para_notes.yaml
+│   ├── code_processing.yaml
+│   ├── config_handling.yaml
+│   ├── markdown_tools.yaml
+│   └── global.yaml                # 全局设置（如路径、日志等级）
+├── logs/
+│   ├── git_ops/
+│   │   ├── code_repos.log
+│   │   └── para_notes.log
+│   ├── code_processing.log
+│   ├── config_handling.log
+│   ├── markdown_tools.log
+│   └── main.log
+├── data/
+│   ├── git_ops/
+│   │   ├── repo_list.json
+│   │   └── para_index.csv
+│   ├── code_processing/
+│   ├── config_handling/
+│   └── markdown_tools/
+├── output/
+│   ├── git_ops/
+│   │   └── repo_status.md
+│   ├── code_processing/
+│   │   └── stats_summary.txt
+│   ├── config_handling/
+│   └── markdown_tools/
+│       └── updated_docs/
+└── main.py
+```
+
+---
+
+### ✅ 优势
+
+- 各模块拥有**独立配置、日志、数据与输出**，方便调试和复用。
+- 保持 `src/` 与其他目录结构一一对应，便于导航与管理。
+- 支持模块独立运行或集中调度。
+
+### 自动脚本
+以下是一个 Python 脚本，用于**自动创建上述模块化目录结构**：
+
+```python
 import os
 import subprocess
 
@@ -77,3 +167,19 @@ if __name__ == "__main__":
     base_directory = r"C:\Users\shade\OneDrive\KG"  # Replace with your base directory path
     process_projects(base_directory)
 #C:\\Users\\shade\\OneDrive\\KG\\002_Projects\\testxx
+```
+
+---
+
+### 📌 使用方式
+
+1. 将以上脚本保存为 `init_structure.py`
+2. 在终端运行：
+
+```bash
+python init_structure.py
+```
+
+这会在当前目录下创建完整的 `auto_scripts/` 结构。
+
+需要我也提供一个 `.gitignore` 或 `Makefile` 示例配套使用吗？
