@@ -162,7 +162,7 @@ E --> D --> C --> B --> P --> F
 
 ---
 
-## 4. 各个“协议/模块”在四层里的位置清单
+# 4. 各个“协议/模块”在四层里的位置清单
 
 ### 应用层（Application Layer）
 
@@ -265,3 +265,92 @@ E --> D --> C --> B --> P --> F
 > “4.3 本协议在 TCP/IP 模型中的层次关系”
 
 里面配一张简化的 mermaid 图 + 上面这几段文字，直接丢到需求/设计文档里。
+
+下面是一段可直接粘进你设计文档的 Markdown 小节（含 mermaid 图），我按“4.3”编号写，你也可以按你现有目录改编号。
+
+---
+
+## 4.3 本协议与 TCP/IP 四层模型的层次关系
+
+### 4.3.1 分层结论
+
+本系统中，**自定义协议几乎全部位于应用层 (Application Layer)**：即你定义的 `LTBUS_ETH_Frame`（0x55 起始、CANID/ChannelId/Data/BCC 等）以及 `ltbus_eth_server + libhelf_cp_ls.so + LTSENSOR + APP` 的交互逻辑。
+传输层 (Transport Layer) / 网络层 (Internet Layer) / 网络接口层 (Link Layer) 由 Linux 内核 TCP/IP 协议栈与网卡驱动完成，你主要通过配置（IP/Port）来使用它们，而非自定义它们。
+
+---
+
+### 4.3.2 各层与当前实现的对应关系
+
+| TCP/IP 层                | 你当前系统中对应的“实现主体”                                                        | 你负责的内容                                                                                 | OS/网络设备负责的内容                      |
+| ----------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------- |
+| 应用层 (Application Layer) | `APP / LTSENSOR / libhelf_cp_ls.so / ltbus_eth_server / CANFDNET-400U` | `LTBUS_ETH_Frame` 帧格式、解析/校验(BCC)、设备抽象(handle/devName)、配置(JSON)、收发 API、SHM 数据组织、fd-pass | 无                                 |
+| 传输层 (Transport Layer)   | TCP (SOCK_STREAM)                                                      | 调用 `socket/connect/send/recv` 或 `socket/bind/listen/accept`；配置端口 `ServerPort`          | 连接管理、可靠传输、重传、乱序重组、流控/拥塞控制         |
+| 网络层 (Internet Layer)    | IPv4                                                                   | 配置 `ServerIP/ClientIP`、网段/网关(部署侧)                                                      | IP 头封装、路由转发(跨网段)、ARP/邻居解析(实现细节)   |
+| 网络接口层 (Link Layer)      | Ethernet + NIC Driver + Switch                                         | 接口 up/down、物理接线、可能的 VLAN/速率                                                            | 以太网帧封装(MAC 头/FCS)、二层转发(交换机)、物理层传输 |
+
+> 说明：`SHM` 与 `AF_UNIX` (Unix Domain Socket) 属于**本机 IPC (Inter-Process Communication)**，不属于 TCP/IP 四层的一部分，但可视为应用层实现细节（用于跨进程共享数据与传递 fd）。
+
+---
+
+### 4.3.3 实际封装关系
+
+你的应用帧 `LTBUS_ETH_Frame` 作为 **TCP payload（有效载荷）** 被逐层封装：
+
+```mermaid
+graph LR
+subgraph App["应用层 (Application Layer)"]
+    A["LTBUS_ETH_Frame\n(startFlag=0x55 + header + CAN frame + bcc)"]
+end
+subgraph Trans["传输层 (Transport Layer)"]
+    T["TCP Header"]
+end
+subgraph Net["网络层 (Internet Layer)"]
+    I["IP Header"]
+end
+subgraph Link["网络接口层 (Link Layer)"]
+    E["Ethernet Header"]
+    F["FCS/帧尾"]
+end
+
+E --> I --> T --> A --> F
+```
+
+---
+
+### 4.3.4 与序列图的“层次对应”解读
+
+结合你的 sequenceDiagram，可将关键动作按层理解：
+
+* **应用层 (Application Layer)**
+
+  * `ltbus_eth_server`：`recv()` 后解析 `LTBUS_ETH_Frame`，写入 SHM（按 `{canId, channelId}` 索引）
+  * `libhelf_cp_ls.so`：创建 `LTBUS_ETH_Frame`（打包/校验），并通过 `clientFd` 调用 `send()`
+  * `LTSENSOR/APP`：只关心 `OpenDevice/Send/Recv` 语义，不关心 TCP/IP 细节
+* **传输层 (Transport Layer)**
+
+  * TCP 负责把应用帧作为字节流可靠送达（你只看到 `send/recv` 的结果）
+* **网络层 (Internet Layer)**
+
+  * IP 负责寻址与路由（同网段通常只经交换机二层转发；跨网段才需要路由器三层转发）
+* **链路层 (Link Layer)**
+
+  * 以太网帧在交换机端口间转发，最终到达对端网卡
+
+---
+
+### 4.3.5 工程注意点：TCP 是字节流，应用层需负责“拆包/粘包”
+
+由于 TCP (byte stream) 不保留消息边界，你的应用层必须用帧格式自行完成 framing（定界/组帧）：
+
+* 推荐解析策略：
+
+  1. 在接收缓冲区中查找 `startFlag == 0x55`（帧起始）
+  2. 读取 `dataLen`（payload length）确定后续应接收/拼出完整帧长度
+  3. 收齐后做 `bcc` 校验；失败则丢弃并继续在流中找下一个 `0x55`
+* 发送侧：必须保证 `dataLen` 与实际 payload 一致，`bcc` 覆盖范围固定且双方一致（否则会出现“对端偶发校验失败”的伪故障）
+
+> 这点是把“应用层自定义帧”跑在 TCP 之上的关键：TCP 只保证字节顺序与可靠性，不保证你一次 `recv()` 就拿到一整帧。
+
+---
+
+如果你把你文档当前目录（标题列表）贴一小段出来，我也可以把这节“自动嵌”到最合适的位置，并把编号、引用（比如引用你的时序图/结构体定义）一起对齐。
