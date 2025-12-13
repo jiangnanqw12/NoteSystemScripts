@@ -48,6 +48,7 @@ E --> D --> C --> B --> P --> F
 
 （如果是 UDP，就把 TCP 头换成 UDP 头；如果是 IPv6，把 IP 头换成 IPv6 头 + 扩展头即可。）
 
+
 ```mermaid
 graph LR
 subgraph Link["网络接口层 (Link Layer)"]
@@ -66,6 +67,8 @@ end
 
 E --> D --> C --> B --> F
 ```
+
+CAN 2 ETH时序图
 
 ```mermaid
 sequenceDiagram

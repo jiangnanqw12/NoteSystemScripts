@@ -1,3 +1,4 @@
+# TCP/IP 四层和CAN ETH 对应
 先把结论说在前面：
 你现在这套 CANFDNET-400U ↔ GPB(TCP server) 的东西，真正“自己定义的协议”几乎全部都在 **应用层**（Application Layer）。
 传输层/网络层/链路层都是 **现成 TCP/IP 协议栈 + 驱动 + 交换机/路由器** 帮你干的，你只是在配置它们（IP、端口、MAC 不在你自己协议格式里出现）。
@@ -88,6 +89,28 @@ end
 
 E --> D --> C --> B --> F
 ```
+
+```mermaid
+graph LR
+subgraph Link["网络接口层 (Link Layer)"]
+  E["以太网帧头 (Ethernet Header: MAC/Type/可选VLAN)"]
+  P["填充 (Padding, 可选)"]
+  F["FCS/CRC (Trailer, 可选可见)"]
+end
+subgraph Net["网络层 (Internet Layer)"]
+  D["IP 头 (IP Header)"]
+end
+subgraph Trans["传输层 (Transport Layer)"]
+  C["TCP 头 (TCP Header)"]
+end
+subgraph App["应用层 (Application Layer)"]
+  B["应用数据 (Application Data)"]
+end
+
+E --> D --> C --> B --> P --> F
+```
+
+（如果是 UDP，就把 TCP 头换成 UDP 头；如果是 IPv6，把 IP 头换成 IPv6 头 + 扩展头即可。）
 
 ---
 
