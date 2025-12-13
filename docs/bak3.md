@@ -1,4 +1,5 @@
-时序图与代码映射
+# 时序图与代码映射
+## 时序图简化版
 ```mermaid
 sequenceDiagram
     autonumber
@@ -55,7 +56,61 @@ sequenceDiagram
 
 
 ```
+## 时序图简化中文版
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CAN as CANFDNET-400U\n(TCP 客户端)
+    participant ETH as ltbus_eth_server\n(TCP 服务端)
+    participant SHM as SHM\n(共享内存)
+    participant UDS as UnixSock\n(fd-pass)
+    participant Lib as libhelf_cp_ls.so
+    participant LTSENSOR
+    participant APP as 分控/业务进程
 
+    %% 初始化阶段
+    note over ETH,SHM: 初始化
+    ETH->>SHM: 创建 SHM
+    ETH->>SHM: 解析 EthDeviceListCfg_LS_CP.json\n并写入 deviceCfg
+    ETH->>ETH: socket()/bind()/listen()
+
+    %% 建立 TCP 连接
+    note over CAN,ETH: 建立 TCP 连接
+    CAN->>ETH: socket()/connect()
+    ETH->>ETH: accept() -> clientFd
+    ETH->>ETH: 进程内记录运行时信息\n(clientFd, ip, state)
+
+    %% 业务进程 open
+    note over APP,ETH: 分控进程 OpenDevice
+    APP->>LTSENSOR:
+    LTSENSOR->>Lib: LTBUS_ETH_OpenDevice(devName)
+    Lib->>SHM: 按 devName 读取 deviceCfg
+    Lib->>UDS: connect() 连接 fd-pass 服务端
+    Note over ETH,UDS: fd 传递固定使用 client[0]
+    ETH-->>UDS: sendmsg(SCM_RIGHTS,\nclient[0])
+    UDS-->>Lib: clientFd
+    Lib-->>LTSENSOR: handle(devCfg + clientFd)
+    LTSENSOR-->>APP:
+
+    %% 收数据 Rx path
+    note over CAN,APP: 收数据 Rx 路径
+    CAN->>ETH: TCP 发送(CAN 帧)
+    ETH->>ETH: recv()/解析 CAN 帧
+    ETH->>SHM: 按 {canId, channelId}\n写入最新帧
+    Note over Lib,SHM: Recv 为 SHM 轮询读取(不做 socket recv)
+    APP->>LTSENSOR:
+    LTSENSOR->>Lib: LTBUS_ETH_DeviceRecv(handle,&frame)
+    Lib->>SHM: 轮询并读取最新帧\nfor {canId, channelId}
+    Lib-->>LTSENSOR: frame
+    LTSENSOR-->>APP:
+
+    %% 发数据 Tx path
+    note over APP,CAN: 发数据 Tx 路径
+    APP->>LTSENSOR:
+    LTSENSOR->>Lib: LTBUS_ETH_DeviceSend(handle,frame)
+    Lib->>CAN: TCP 发送(frame)\n通过 clientFd
+
+```
 下面把你这张时序图里每一条“箭头”，落实到**实际代码里的函数/系统调用**，再给出**真实的层级关系**（谁调用谁、谁依赖谁），并指出**和你图里不一致/需要修正的点**。
 
 ---
