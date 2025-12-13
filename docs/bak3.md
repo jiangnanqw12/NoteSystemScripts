@@ -1,4 +1,4 @@
-
+时序图与代码映射
 ```mermaid
 sequenceDiagram
     autonumber
@@ -20,7 +20,7 @@ sequenceDiagram
     note over CAN,ETH: 建立 TCP 连接
     CAN->>ETH: socket()/connect()
     ETH->>ETH: accept() -> clientFd
-    ETH->>SHM: update runtime info\n(clientFd, ip, state)
+    ETH->>ETH: record runtime info\n(clientFd, ip, state)
 
     %% 业务进程 open
     note over APP,ETH: 分控进程 OpenDevice
@@ -28,8 +28,8 @@ sequenceDiagram
     LTSENSOR->>Lib: LTBUS_ETH_OpenDevice(devName)
     Lib->>SHM: read deviceCfg by devName
     Lib->>UDS: connect() to fd-pass server
-    Lib->>UDS: request clientFd(devName)
-    ETH-->>UDS: sendmsg(SCM_RIGHTS,\nclientFd)
+    Note over ETH,UDS: fd passing always uses client[0]
+    ETH-->>UDS: sendmsg(SCM_RIGHTS,\nclient[0])
     UDS-->>Lib: clientFd
     Lib-->>LTSENSOR: handle(devCfg + clientFd)
     LTSENSOR-->>APP:
@@ -39,9 +39,10 @@ sequenceDiagram
     CAN->>ETH: TCP send(CAN frame)
     ETH->>ETH: recv()/parse CAN frame
     ETH->>SHM: write latest frame\nby {canId, channelId}
+    Note over Lib,SHM: Recv is SHM polling (no socket recv)
     APP->>LTSENSOR:
     LTSENSOR->>Lib: LTBUS_ETH_DeviceRecv(handle,&frame)
-    Lib->>SHM: read latest frame\nfor {canId, channelId}
+    Lib->>SHM: poll & read latest frame\nfor {canId, channelId}
     Lib-->>LTSENSOR: frame
     LTSENSOR-->>APP:
 
@@ -49,8 +50,10 @@ sequenceDiagram
     note over APP,CAN: 发数据 Tx path
     APP->>LTSENSOR:
     LTSENSOR->>Lib: LTBUS_ETH_DeviceSend(handle,frame)
-    Lib->>ETH: TCP send(frame)\nvia clientFd
-    ETH->>CAN: forward to CANFDNET-400U\n(or CAN bus)
+    Lib->>CAN: TCP send(frame)\nvia clientFd
+
+
+
 ```
 
 下面把你这张时序图里每一条“箭头”，落实到**实际代码里的函数/系统调用**，再给出**真实的层级关系**（谁调用谁、谁依赖谁），并指出**和你图里不一致/需要修正的点**。
@@ -223,3 +226,64 @@ sequenceDiagram
 ---
 
 如果你愿意我按“**不大改结构**”的原则，直接给你一版“与代码 100% 对齐”的 Mermaid 时序图（把上面 3 个点修正掉），并在图里用注释标注 **fd passing 是 client[0]**、**Recv 是 SHM polling**。
+
+## 时序图详细版
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CAN as CANFDNET-400U\n(TCP Client)
+    participant ETH as ltbus_eth_server\n(TCP Server + fd-pass)
+    participant SHM as SHM\n(共享内存)
+    participant UDS as UnixSock\n(SCM_RIGHTS fd-pass)
+    participant Lib as libhelf_cp_ls.so\n(ltbus_eth_device_opt)
+    participant LTSENSOR
+    participant APP as 分控/业务进程
+
+    %% 初始化阶段
+    note over ETH,SHM: 初始化 (Init)
+    ETH->>SHM: LTR_ShmMap() create/map SHM\nLTBUS_ETH_MallocDevListCfgShm()
+    ETH->>SHM: LTBUS_ETH_ParseEthCfg()\nparse EthDeviceListCfg_LS_CP.json\n& write deviceCfg into SHM
+    ETH->>ETH: LTBUS_ETH_CreatTcpSocket()\nsocket/bind/listen (TCP)
+    ETH->>ETH: LTBUS_ETH_CreatUnixSocket()\nsocket/unlink/bind/listen (UDS)
+
+    %% 建立 TCP 连接
+    note over CAN,ETH: 建立 TCP 连接
+    CAN->>ETH: socket()/connect()
+    ETH->>ETH: accept() -> clientFd\nstore into socketInfo->client[i]
+    note over ETH: runtime (clientFd/ip/state) kept in ETH process memory\n(no SHM update in current code)
+
+    %% 业务进程 open
+    note over APP,ETH: 分控进程 OpenDevice
+    APP->>LTSENSOR: OpenDevice(devName)
+    LTSENSOR->>Lib: LTBUS_ETH_OpenDevice(devName)
+
+    Lib->>SHM: LTBUS_ETH_GetDevCfg(devName)\nread deviceCfg by devName (from SHM)
+    Lib->>UDS: socket(AF_UNIX)+connect()\nLTBUS_ETH_GetTcpClientFd()
+    note over Lib,UDS: No "request devName" message is sent in current code\nLib connects then waits recvmsg()
+
+    ETH-->>UDS: sendmsg(SCM_RIGHTS, client[0])
+    note over ETH,UDS: fd-pass is hard-coded to socketInfo->client[0]\n(not selected by devName)
+    UDS-->>Lib: recvmsg() -> clientFd
+
+    Lib-->>LTSENSOR: handle(devCfg + clientFd)
+    LTSENSOR-->>APP: handle
+
+    %% 收数据 Rx path
+    note over CAN,APP: 收数据 Rx path (SHM polling)
+    CAN->>ETH: TCP send(CAN frame)
+    ETH->>ETH: recv() + ProcessMessage()\n(de-framing + BCC check)
+    ETH->>SHM: RecordClientMsg()\nwrite latest frame into SHM\nby {canId, channelId}
+
+    APP->>LTSENSOR: DeviceRecv(handle)
+    LTSENSOR->>Lib: LTBUS_ETH_DeviceRecv(handle,&frame)
+    Lib->>SHM: read latest frame from SHM\nbusy-wait by lastRecvTime (polling)\nLTR_UsDelay(1) until updated/timeout
+    Lib-->>LTSENSOR: frame
+    LTSENSOR-->>APP: frame
+
+    %% 发数据 Tx path
+    note over APP,CAN: 发数据 Tx path (direct TCP send from Lib)
+    APP->>LTSENSOR: DeviceSend(handle,frame)
+    LTSENSOR->>Lib: LTBUS_ETH_DeviceSend(handle,frame)
+    Lib->>Lib: LTBUS_ETH_CreateCanFrame()\nfill header/canId/channelId/dataLen\n+ CalculateBcc()
+    Lib->>CAN: send(clientFd, ethFrame)\n(clientFd was fd-passed via SCM_RIGHTS)\n(no user-space forwarding by ETH)
+```
