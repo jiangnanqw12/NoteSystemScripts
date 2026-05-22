@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pata1 Mermaid 整合版</title>
+<style>
+:root { --fg:#0f172a; --blue:#0b3a5b; --muted:#64748b; --box:#f8fafc; --line:#cbd5e1; }
+body { margin:0; background:#e5e7eb; color:var(--fg); font-family:"Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif; }
+.deck { display:flex; flex-direction:column; align-items:center; gap:22px; padding:22px; }
+.slide { width:1280px; min-height:720px; box-sizing:border-box; background:white; padding:42px 52px 36px; border-radius:8px; box-shadow:0 8px 30px rgba(15,23,42,.15); overflow:hidden; }
+.slide.lead { display:flex; flex-direction:column; justify-content:center; text-align:center; }
+h1 { font-size:38px; color:var(--blue); margin:0 0 18px; }
+h2 { font-size:28px; color:var(--blue); margin:0 0 12px; }
+h3 { font-size:22px; color:#134e4a; margin:0 0 8px; }
+p, li { font-size:21px; line-height:1.32; }
+ul, ol { margin-top:8px; }
+table { width:100%; border-collapse:collapse; font-size:17px; }
+th, td { border:1px solid var(--line); padding:8px 10px; vertical-align:top; }
+th { background:#e0f2fe; color:#075985; }
+.subtitle { font-size:24px; color:#334155; margin-top:20px; }
+.tag { display:inline-block; padding:4px 12px; border-radius:999px; background:#e0f2fe; color:#075985; font-size:18px; margin:6px 8px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+.box { border:2px solid var(--line); border-radius:14px; padding:14px 16px; background:var(--box); }
+.note { font-size:17px; color:var(--muted); margin-top:10px; }
+.mermaid { width:100%; text-align:center; }
+.mermaid svg { max-width:100%; max-height:540px; }
+@media print { body { background:white; } .deck { padding:0; gap:0; } .slide { border-radius:0; box-shadow:none; page-break-after:always; } }
+</style>
+</head>
+<body>
+<div class="deck">
+<section class="slide lead"><h1>一种基于进程组生命周期的处理器核、内存与设备资源确定性编排方法及系统</h1>
+<p class="subtitle">PPT 压缩版 · 已整合 pata1 中最适合展示的 Mermaid 图</p>
+<p><span class="tag">进程组生命周期</span><span class="tag">加载期资源固化</span><span class="tag">启动区传递</span><span class="tag">统一回收闭环</span></p>
+</section>
+<section class="slide "><h1>本版整合的 Mermaid 图</h1>
+<table><thead><tr><th>序号</th><th>图</th><th>放置位置</th><th>PPT 价值</th></tr></thead><tbody>
+<tr><td>1</td><td>传统方式 vs 本发明方式</td><td>背景 / 现有问题</td><td>快速建立问题对比</td></tr>
+<tr><td>2</td><td>控制面-资源池-数据面总体架构</td><td>核心方案</td><td>说明系统组成与资源流向</td></tr>
+<tr><td>3</td><td>进程组生命周期状态机</td><td>创新点</td><td>强化“全生命周期闭环”主保护点</td></tr>
+<tr><td>4</td><td>加载期资源编排时序</td><td>实施方式</td><td>展示 CPU/内存/设备/BOOT 区固化流程</td></tr>
+<tr><td>5</td><td>启动区 Boot Region 结构</td><td>技术落地点</td><td>说明资源描述如何传递给数据面</td></tr>
+</tbody></table>
+<p class="note">未纳入：关键流程图、失败回滚图、异常回收图等，信息与状态机/时序图有重复，适合放备份页。</p>
+</section>
+<section class="slide "><h1>1. 发明背景与现有技术</h1>
+<h2>发明背景技术简介</h2>
+<p>本发明面向半导体装备、精密运动控制和低时延数据面执行场景。</p>
+<p>核心矛盾：关键执行任务若直接运行在通用 OS 或普通实时任务环境中，容易受到：</p>
+<ul><li>调度、tick、中断迁移影响；</li><li>内存缺页、运行期分配、驱动栈路径影响；</li><li>CPU、内存、设备资源竞争影响。</li></ul>
+<p><strong>目标：在执行单元启动前完成 CPU、内存、设备和启动参数的确定性编排。</strong></p>
+</section>
+<section class="slide "><h1>图 1：传统方式 vs 本发明方式</h1><div class="mermaid">flowchart LR
+    subgraph OLD[传统方式]
+        A1[实时任务启动]
+        A2[运行期申请内存]
+        A3[运行期查询设备]
+        A4[共享CPU调度]
+        A5[异常后分散回收]
+        A1 --&gt; A2 --&gt; A3 --&gt; A4 --&gt; A5
+    end
+
+    subgraph NEW[本发明方式]
+        B1[进程组加载]
+        B2[加载期申请CPU]
+        B3[加载期申请内存]
+        B4[加载期绑定设备]
+        B5[启动区传递资源描述]
+        B6[生命周期统一回收]
+        B1 --&gt; B2 --&gt; B3 --&gt; B4 --&gt; B5 --&gt; B6
+    end
+
+    OLD --&gt; R1[运行期不确定性较高]
+    NEW --&gt; R2[资源边界明确且可回收]</div><p class="note">传统方式的问题在于资源行为发生在运行期；本发明将资源动作前移到加载期，并绑定生命周期结束时的统一回收。</p></section>
+<section class="slide "><h1>图 2：控制面-资源池-数据面总体架构</h1><div class="mermaid">flowchart TB
+    subgraph CP[控制面]
+        A[业务控制进程]
+        B[进程组管理模块]
+        C[资源管理模块]
+        D[设备注册模块]
+        E[启动区生成模块]
+        F[状态监控模块]
+    end
+
+    subgraph RS[系统资源池]
+        R1[处理器核资源池]
+        R2[物理内存资源池]
+        R3[设备资源池]
+    end
+
+    subgraph DP[数据面]
+        G[进程组]
+        G1[执行进程1]
+        G2[执行进程2]
+        G3[执行进程N]
+    end
+
+    A --&gt; B
+    B --&gt; C
+    C --&gt; R1
+    C --&gt; R2
+    C --&gt; D
+    D --&gt; R3
+    C --&gt; E
+    E --&gt; G
+    G --&gt; G1
+    G --&gt; G2
+    G --&gt; G3
+    F --&gt; B
+    F --&gt; G</div><p class="note">控制面不让执行进程临时申请资源，而是由资源管理模块统一申请 CPU、物理内存和设备资源，再由启动区生成模块传递给数据面进程组。</p></section>
+<section class="slide "><h1>图 3：进程组生命周期状态机</h1><div class="mermaid">stateDiagram-v2
+    [*] --&gt; 未创建
+
+    未创建 --&gt; 创建中: 接收加载请求
+    创建中 --&gt; 资源申请中: 创建进程组控制块
+    资源申请中 --&gt; 启动区生成中: CPU/内存/设备申请成功
+    启动区生成中 --&gt; 启动中: 写入启动参数
+    启动中 --&gt; 运行中: 数据面进程组启动成功
+
+    运行中 --&gt; 卸载中: 控制面主动卸载
+    运行中 --&gt; 异常处理中: 心跳超时/执行异常
+    启动中 --&gt; 回滚中: 启动失败
+    资源申请中 --&gt; 回滚中: 资源申请失败
+    启动区生成中 --&gt; 回滚中: 参数生成失败
+
+    异常处理中 --&gt; 诊断快照中: 保留现场
+    诊断快照中 --&gt; 回收中: 开始资源回收
+    卸载中 --&gt; 回收中: 停止执行进程
+    回滚中 --&gt; 回收中: 释放已申请资源
+
+    回收中 --&gt; 已卸载: CPU/内存/设备释放完成
+    已卸载 --&gt; [*]</div><p class="note">最能体现主保护点：将未创建、加载、运行、卸载、异常、回滚、回收纳入同一个生命周期状态机。</p></section>
+<section class="slide "><h1>图 4：加载期资源编排时序</h1><div class="mermaid">sequenceDiagram
+    participant App as 控制面进程
+    participant PGM as 进程组管理模块
+    participant RM as 资源管理模块
+    participant CPU as CPU资源管理
+    participant MEM as 内存资源管理
+    participant DEV as 设备管理模块
+    participant BOOT as 启动区生成模块
+    participant PG as 数据面进程组
+
+    App-&gt;&gt;PGM: 提交加载参数
+    PGM-&gt;&gt;PGM: 创建进程组控制块
+    PGM-&gt;&gt;RM: 请求资源编排
+
+    RM-&gt;&gt;CPU: 申请处理器核
+    CPU--&gt;&gt;RM: 返回CPU core列表
+
+    RM-&gt;&gt;MEM: 申请物理内存
+    MEM-&gt;&gt;MEM: 排序并合并连续物理块
+    MEM--&gt;&gt;RM: 返回内存块列表
+
+    RM-&gt;&gt;DEV: 查询设备列表
+    DEV--&gt;&gt;RM: 返回设备描述表
+
+    RM-&gt;&gt;BOOT: 生成启动区
+    BOOT--&gt;&gt;PGM: 返回启动区地址
+
+    PGM-&gt;&gt;PG: 启动进程组
+    PG--&gt;&gt;PGM: 启动成功
+    PGM--&gt;&gt;App: 返回进程组ID</div><p class="note">CPU、内存、设备不是运行后动态发现，而是在启动前统一整理成启动区，由数据面进程组按启动区执行。</p></section>
+<section class="slide "><h1>图 5：启动区 Boot Region 结构</h1><div class="mermaid">flowchart TB
+    BOOT[启动区 Boot Region]
+
+    BOOT --&gt; H[启动区头部]
+    H --&gt; H1[版本号]
+    H --&gt; H2[校验值]
+    H --&gt; H3[进程组ID]
+    H --&gt; H4[入口地址]
+
+    BOOT --&gt; C[CPU资源描述]
+    C --&gt; C1[CPU core数量]
+    C --&gt; C2[CPU core列表]
+    C --&gt; C3[逻辑CPU映射]
+
+    BOOT --&gt; M[内存资源描述]
+    M --&gt; M1[内存块数量]
+    M --&gt; M2[物理地址列表]
+    M --&gt; M3[虚拟地址映射]
+    M --&gt; M4[内存属性]
+
+    BOOT --&gt; D[设备资源描述]
+    D --&gt; D1[设备数量]
+    D --&gt; D2[设备名称]
+    D --&gt; D3[寄存器基地址]
+    D --&gt; D4[中断号]
+    D --&gt; D5[设备属性]
+
+    BOOT --&gt; O[可选运行参数]
+    O --&gt; O1[日志缓冲区地址]
+    O --&gt; O2[心跳地址]
+    O --&gt; O3[共享内存描述]
+    O --&gt; O4[安全退出入口]</div><p class="note">启动区是控制面向数据面传递资源编排结果的核心载体，用于固化 CPU、内存、设备、中断号、心跳、日志和安全退出入口等信息。</p></section>
+<section class="slide "><h1>2. 主要创新技术点说明</h1>
+<h2>本发明创造要保护的创新技术与现有技术的区别</h2>
+<p><strong>核心创新：以“进程组生命周期”为资源编排单位，而不是分别管理 CPU、内存、设备。</strong></p>
+<ol><li>以进程组为资源边界；</li><li>加载阶段完成资源固化；</li><li>处理器核剥离，降低普通调度干扰；</li><li>物理内存预申请与连续块合并；</li><li>设备注册表 + 启动区传递；</li><li>正常卸载与异常回收共用闭环。</li></ol>
+</section>
+<section class="slide "><h1>3. 技术方案及有益效果：运行与卸载流程</h1>
+<h2>运行期原则</h2>
+<ul><li>数据面执行进程只访问启动区声明的资源集合；</li><li>关键路径不再进行大规模内存申请、设备枚举和资源发现；</li><li>控制面通过心跳、共享内存或轻量通知机制监控进程组状态。</li></ul>
+<h2>卸载 / 异常回收原则</h2>
+<ol><li>停止数据面执行进程；</li><li>释放或解除设备引用；</li><li>按内存块列表释放物理内存；</li><li>将处理器核释放回通用 OS；</li><li>清理控制块、启动区和监控状态。</li></ol>
+</section>
+<section class="slide "><h1>3. 技术方案及有益效果：其他实施方式</h1>
+<ul><li><strong>可重复加载</strong>：保存资源描述表，复用 CPU、内存、设备规格。</li><li><strong>分阶段异常回收</strong>：停止执行 → 冻结现场 → 诊断快照 → 释放设备/内存/CPU。</li><li><strong>多进程组资源隔离</strong>：不同 PG 拥有独立 CPU core、内存块和设备列表。</li><li><strong>控制面保留核策略</strong>：预留控制面 core，剩余 core 由资源管理模块分配。</li><li><strong>资源失败回滚</strong>：按申请相反顺序释放已申请资源，避免半加载状态。</li></ul>
+</section>
+<section class="slide "><h1>3. 技术方案及有益效果：有益效果论证</h1>
+<div class="grid2"><div class="box"><h3>确定性</h3><ul><li>减少运行期资源申请</li><li>降低设备发现与内存扩展抖动</li><li>便于分析最坏情况时延</li></ul></div><div class="box"><h3>可靠性</h3><ul><li>CPU、内存、设备边界清晰</li><li>异常后可按控制块确定性回收</li><li>减少资源泄漏和残留占用</li></ul></div></div>
+<p><strong>价值总结：把低时延执行环境从“松散配置”变为“可重复、可检查、可回收”的生命周期闭环。</strong></p>
+</section>
+<section class="slide "><h1>4. 发明创造价值自评</h1>
+<table><thead><tr><th>自评维度</th><th>分数</th><th>理由</th></tr></thead><tbody>
+<tr><td>创新性</td><td>4.4</td><td>将 CPU hotplug、内存预分配、设备注册绑定到进程组生命周期，形成组合创新。</td></tr>
+<tr><td>市场价值</td><td>4.5</td><td>适用于光刻机、半导体装备、高速运动控制、低时延通信平台。</td></tr>
+<tr><td>技术价值</td><td>4.8</td><td>直接解决资源隔离、确定性构造、运行期抖动和异常回收问题。</td></tr>
+<tr><td>可规避程度</td><td>4.1</td><td>若覆盖“生命周期 + CPU 剥离 + 内存预申请 + 启动区 + 回收”，较难单点规避。</td></tr>
+<tr><td>侵权证据可获得性</td><td>3.2</td><td>可通过加载参数、CPU online/offline、内存块记录、启动区和异常回收行为辅助证明。</td></tr>
+</tbody></table>
+</section>
+<section class="slide lead"><h1>一页总结</h1>
+<p><strong>进程组生命周期 = 低时延资源编排的主轴</strong></p>
+<p class="subtitle">加载前编排 → 启动区固化 → 独占 / 隔离运行 → 统一卸载 / 异常回收</p>
+<p>本方案的保护重点不是单一资源动作，而是“进程组全生命周期 + 多资源确定性闭环”。</p>
+</section>
+</div>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', flowchart: { useMaxWidth: true } });
+</script>
+</body>
+</html>
